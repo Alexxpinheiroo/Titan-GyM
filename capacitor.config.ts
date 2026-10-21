@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.titangym.app',
+  appId: 'com.alexxpinheiroo.titangym',
   appName: 'Titan Gym',
   webDir: 'dist',
   server: {
