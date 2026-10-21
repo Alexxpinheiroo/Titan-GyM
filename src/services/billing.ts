@@ -30,16 +30,16 @@ export const DEFAULT_PLANS: TitanPlanOption[] = [
   {
     id: "annual",
     title: "Plano Anual Titan PRO",
-    priceDisplay: "R$ 149,90/ano",
-    equivalentMonthlyDisplay: "R$ 12,49/mês",
-    discountBadge: "ECONOMIZE 50%",
+    priceDisplay: "R$ 179,90/ano",
+    equivalentMonthlyDisplay: "R$ 14,99/mês",
+    discountBadge: "ECONOMIZE 58%",
     trialDays: 7,
   },
   {
     id: "monthly",
     title: "Plano Mensal Titan PRO",
-    priceDisplay: "R$ 29,90/mês",
-    equivalentMonthlyDisplay: "R$ 29,90/mês",
+    priceDisplay: "R$ 39,90/mês",
+    equivalentMonthlyDisplay: "R$ 39,90/mês",
     trialDays: 3,
   },
 ];
