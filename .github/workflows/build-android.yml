@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build Android App Bundle (.aab)
+    name: Build & Sign Android App Bundle (.aab)
     runs-on: ubuntu-latest
 
     steps:
@@ -32,29 +32,24 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Android SDK tools
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-
-      - name: Generate Release Keystore
-        run: keytool -genkeypair -alias titangym -keypass titangym2026 -keystore android/titan-release-key.jks -storepass titangym2026 -dname "CN=Titan Gym, OU=Mobile, O=TitanGym, L=Sao Paulo, ST=SP, C=BR" -keyalg RSA -keysize 2048 -validity 10000
+      - name: Decode Keystore
+        run: |
+          echo "Using project keystore"
 
       - name: Build Android App Bundle (.aab)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease --no-daemon
+          ./gradlew bundleRelease
 
       - name: Upload Production AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: titan-gym-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
-          retention-days: 30
