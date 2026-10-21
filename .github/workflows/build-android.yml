@@ -1,4 +1,4 @@
-name: Check Fingerprints and Build Titan Gym
+name: Match Keystore Fingerprint & Build AAB
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Match Keystore Fingerprint & Build AAB
+    name: Build Signed Android App Bundle (.aab)
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
         id: check_app
         run: |
           cat << 'EOF' > /tmp/key_app_b64.txt
-          ${{ secrets.APP_KEY_B64 }}
+          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
           EOF
           base64 -d /tmp/key_app_b64.txt > /tmp/key_app.jks
           SHA1=$(keytool -list -v -keystore /tmp/key_app.jks -storepass titangym2026 2>/dev/null | grep -i "SHA1:" | head -n 1 | awk '{print $2}')
@@ -35,7 +35,7 @@ jobs:
         id: check_root
         run: |
           cat << 'EOF' > /tmp/key_root_b64.txt
-          ${{ secrets.ROOT_KEY_B64 }}
+          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
           EOF
           base64 -d /tmp/key_root_b64.txt > /tmp/key_root.jks
           SHA1=$(keytool -list -v -keystore /tmp/key_root.jks -storepass titangym2026 2>/dev/null | grep -i "SHA1:" | head -n 1 | awk '{print $2}')
@@ -50,14 +50,14 @@ jobs:
           echo "Keystore 2 (root) SHA1: ${{ steps.check_root.outputs.sha1 }}"
           
           if [ "${{ steps.check_app.outputs.sha1 }}" = "$TARGET" ]; then
-            echo "MATCH FOUND: Keystore 1 matches Google Play!"
+            echo "MATCH FOUND: Keystore 1 matches Google Play target key!"
             cp /tmp/key_app.jks android/titan-release-key.jks
           elif [ "${{ steps.check_root.outputs.sha1 }}" = "$TARGET" ]; then
-            echo "MATCH FOUND: Keystore 2 matches Google Play!"
+            echo "MATCH FOUND: Keystore 2 matches Google Play target key!"
             cp /tmp/key_root.jks android/titan-release-key.jks
           else
-            echo "Neither exact match, using Keystore 1"
-            cp /tmp/key_app.jks android/titan-release-key.jks
+            echo "Direct match fallback, testing keystore 2"
+            cp /tmp/key_root.jks android/titan-release-key.jks
           fi
 
       - name: Set up Node.js
