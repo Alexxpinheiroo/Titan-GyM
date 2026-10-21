@@ -1,4 +1,4 @@
-name: Build Titan Gym Android Release AAB
+name: Check Fingerprints and Build Titan Gym
 
 on:
   workflow_dispatch:
@@ -7,12 +7,58 @@ on:
 
 jobs:
   build:
-    name: Build & Sign Android App Bundle (.aab)
+    name: Match Keystore Fingerprint & Build AAB
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up Java JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Test Keystore 1 (app)
+        id: check_app
+        run: |
+          cat << 'EOF' > /tmp/key_app_b64.txt
+          ${{ secrets.APP_KEY_B64 }}
+          EOF
+          base64 -d /tmp/key_app_b64.txt > /tmp/key_app.jks
+          SHA1=$(keytool -list -v -keystore /tmp/key_app.jks -storepass titangym2026 2>/dev/null | grep -i "SHA1:" | head -n 1 | awk '{print $2}')
+          echo "SHA1_APP=$SHA1"
+          echo "sha1=$SHA1" >> $GITHUB_OUTPUT
+
+      - name: Test Keystore 2 (root)
+        id: check_root
+        run: |
+          cat << 'EOF' > /tmp/key_root_b64.txt
+          ${{ secrets.ROOT_KEY_B64 }}
+          EOF
+          base64 -d /tmp/key_root_b64.txt > /tmp/key_root.jks
+          SHA1=$(keytool -list -v -keystore /tmp/key_root.jks -storepass titangym2026 2>/dev/null | grep -i "SHA1:" | head -n 1 | awk '{print $2}')
+          echo "SHA1_ROOT=$SHA1"
+          echo "sha1=$SHA1" >> $GITHUB_OUTPUT
+
+      - name: Select Matching Keystore
+        run: |
+          TARGET="24:C0:3D:1D:5D:7A:6B:CB:CD:51:48:EC:1D:B1:48:D1:CC:85:A2:70"
+          echo "Google Play Target SHA1: $TARGET"
+          echo "Keystore 1 (app)  SHA1: ${{ steps.check_app.outputs.sha1 }}"
+          echo "Keystore 2 (root) SHA1: ${{ steps.check_root.outputs.sha1 }}"
+          
+          if [ "${{ steps.check_app.outputs.sha1 }}" = "$TARGET" ]; then
+            echo "MATCH FOUND: Keystore 1 matches Google Play!"
+            cp /tmp/key_app.jks android/titan-release-key.jks
+          elif [ "${{ steps.check_root.outputs.sha1 }}" = "$TARGET" ]; then
+            echo "MATCH FOUND: Keystore 2 matches Google Play!"
+            cp /tmp/key_root.jks android/titan-release-key.jks
+          else
+            echo "Neither exact match, using Keystore 1"
+            cp /tmp/key_app.jks android/titan-release-key.jks
+          fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -26,30 +72,26 @@ jobs:
       - name: Build Web Production Bundle
         run: npm run build
 
-      - name: Set up Java JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-34" "platform-tools"
 
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Decode Keystore
-        run: |
-          echo "Using project keystore"
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Build Android App Bundle (.aab)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew bundleRelease
+          ./gradlew bundleRelease --no-daemon
 
       - name: Upload Production AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: titan-gym-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30
