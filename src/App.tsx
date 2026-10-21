@@ -33,11 +33,19 @@ export default function App() {
 
   // First-time onboarding status
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("skip_onboarding=true")) {
+      return true;
+    }
     return localStorage.getItem("titan_onboarding_completed") === "true";
   });
 
   // Tab route state
   const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam) return tabParam;
+    }
     return localStorage.getItem("titan_active_tab") || "home";
   });
 
