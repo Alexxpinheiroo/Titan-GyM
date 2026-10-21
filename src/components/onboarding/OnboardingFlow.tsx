@@ -26,6 +26,7 @@ import SocialProofStep from "./SocialProofStep";
 import FitnessScoreStep from "./FitnessScoreStep";
 import PlanReadyStep from "./PlanReadyStep";
 import PaywallStep from "./PaywallStep";
+import { ALL_EQUIPMENT_ITEMS } from "./equipmentData";
 
 import {
   User,
@@ -117,16 +118,37 @@ export default function OnboardingFlow({ onFinish, onSkipToApp }: OnboardingFlow
   // Calculate progress relative to total question steps (excluding welcome)
   const progress = Math.min(1, Math.max(0.04, currentStepIndex / (STEP_ORDER.length - 1)));
 
+  const shouldSkipEquipment = state.location === "comercial" || state.location === "corpo";
+
   const handleNext = () => {
-    if (currentStepIndex < STEP_ORDER.length - 1) {
-      setCurrentStepIndex((prev) => prev + 1);
+    const nextIdx = currentStepIndex + 1;
+    if (nextIdx >= STEP_ORDER.length) return;
+
+    // Smart skip: If gym is commercial or bodyweight, skip the detailed equipment checklist
+    if (currentStep === "location" && shouldSkipEquipment) {
+      const compPowerIdx = STEP_ORDER.indexOf("comparison_power");
+      if (compPowerIdx !== -1) {
+        setCurrentStepIndex(compPowerIdx);
+        return;
+      }
     }
+
+    setCurrentStepIndex(nextIdx);
   };
 
   const handleBack = () => {
-    if (currentStepIndex > 0) {
-      setCurrentStepIndex((prev) => prev - 1);
+    if (currentStepIndex <= 0) return;
+
+    // Smart skip backwards: If gym is commercial or bodyweight, skip back to location
+    if (currentStep === "comparison_power" && shouldSkipEquipment) {
+      const locationIdx = STEP_ORDER.indexOf("location");
+      if (locationIdx !== -1) {
+        setCurrentStepIndex(locationIdx);
+        return;
+      }
     }
+
+    setCurrentStepIndex((prev) => prev - 1);
   };
 
   const finalizeOnboarding = (chosenPlan: "pro" | "free") => {
@@ -315,32 +337,46 @@ export default function OnboardingFlow({ onFinish, onSkipToApp }: OnboardingFlow
           title="Onde você treina atualmente?"
           subtitle="Filtraremos os exercícios para o maquinário disponível no seu espaço."
           selectedValue={state.location}
-          onSelect={(id) => setState((prev) => ({ ...prev, location: id }))}
+          onSelect={(id) => {
+            let nextEquipment = state.equipment;
+            if (id === "comercial") {
+              nextEquipment = ALL_EQUIPMENT_ITEMS;
+            } else if (id === "corpo") {
+              nextEquipment = ["Peso Corporal", "Barra fixa"];
+            } else if (state.equipment.length === 0 || state.equipment.length === ALL_EQUIPMENT_ITEMS.length) {
+              nextEquipment = ["Halteres", "Banco Reto", "Polia", "Anilha"];
+            }
+            setState((prev) => ({
+              ...prev,
+              location: id,
+              equipment: nextEquipment,
+            }));
+          }}
           onNext={handleNext}
           onBack={handleBack}
           options={[
             {
               id: "comercial",
               title: "Academia Comercial",
-              subtitle: "Totalmente equipada com máquinas, cabos e pesos",
+              subtitle: "Totalmente equipada (Smart Fit, BlueFit, etc.) – Pula lista de máquinas",
               icon: <Building2 className="w-6 h-6" />,
             },
             {
               id: "pequena",
               title: "Academia Pequena / Condomínio",
-              subtitle: "Pesos livres, esteiras e máquinas essenciais",
+              subtitle: "Pesos livres e máquinas essenciais",
               icon: <Building className="w-6 h-6" />,
             },
             {
               id: "casa",
               title: "Academia em Casa (Home Gym)",
-              subtitle: "Pesos livres e equipamentos mínimos",
+              subtitle: "Halteres e equipamentos mínimos",
               icon: <Home className="w-6 h-6" />,
             },
             {
               id: "corpo",
               title: "Peso Corporal / Calistenia",
-              subtitle: "Sem equipamentos – apenas calistenia e gravidade",
+              subtitle: "Apenas peso do corpo e barras – Sem máquinas",
               icon: <PersonStanding className="w-6 h-6" />,
             },
           ]}

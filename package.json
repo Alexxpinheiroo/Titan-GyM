@@ -1,35 +1,41 @@
 {
-  "name": "react-example",
+  "name": "titan-gym",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "cap:sync": "cap sync",
+    "cap:open": "cap open android",
+    "cap:build": "vite build && cap sync"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
-    "@tailwindcss/vite": "^4.1.14",
-    "@vitejs/plugin-react": "^5.0.4",
+    "@capacitor/android": "^7.0.1",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@revenuecat/purchases-capacitor": "^10.4.0",
+    "@supabase/supabase-js": "^2.118.0",
     "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "express": "^4.21.2",
-    "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
+    "react-dom": "^19.0.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.0.1",
+    "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "vite": "^6.2.3"
   }
 }

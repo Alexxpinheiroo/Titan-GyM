@@ -3,10 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
-import { User, Award, Zap, Flame, ShieldAlert, BarChart, Settings, Check, Sun, Moon, Monitor } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { User, Award, Zap, Flame, ShieldAlert, BarChart, Settings, Check, Sun, Moon, Monitor, Cloud, LogOut } from "lucide-react";
 import { UserProfile, DailyMetrics } from "../types";
 import { ThemeMode, ResolvedTheme } from "../hooks/useTheme";
+import { authService, TitanUser } from "../services/supabase";
+import AuthModal from "./AuthModal";
+import LegalModal from "./LegalModal";
 
 interface ProfileTabProps {
   profile: UserProfile;
@@ -33,12 +36,21 @@ export default function ProfileTab({
 }: ProfileTabProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(profile.name);
+  const [currentUser, setCurrentUser] = useState<TitanUser | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<"privacy" | "terms" | null>(null);
+
+  useEffect(() => {
+    authService.getCurrentUser().then(setCurrentUser);
+  }, []);
 
   const achievements = [
     { id: "ach-1", title: "Foco Titan", desc: "Mantenha uma racha de 10+ dias", unlocked: profile.streakDays >= 10, icon: Flame, color: "text-orange-400" },
     { id: "ach-2", title: "Gigante do Volume", desc: "Levante um volume acumulado superior a 10 toneladas", unlocked: metrics.totalVolumeTons >= 10, icon: Zap, color: "text-[#CDFC39]" },
-    { id: "ach-3", title: "Fiel ao Templo", desc: "Complete seu primeiro treino", unlocked: metrics.activeMinutes > 260, icon: Award, color: "text-[#CDFC39]" },
+    { id: "ach-3", title: "Fiel ao Templo", desc: "Complete seu primeiro treino", unlocked: metrics.activeMinutes > 0, icon: Award, color: "text-[#CDFC39]" },
   ];
+
+  const userLevel = Math.max(1, Math.floor((metrics.activeMinutes / 60) + (profile.streakDays * 0.5) + (metrics.totalVolumeTons * 0.2)));
 
   const handleSaveName = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,7 +113,7 @@ export default function ProfileTab({
                 TITAN FREE
               </span>
             )}
-            <span className="text-gray-400">• Nível 24</span>
+            <span className="text-gray-400">• Nível {userLevel}</span>
           </p>
         </div>
 
@@ -303,6 +315,100 @@ export default function ProfileTab({
             </p>
           </div>
         </section>
+      )}
+
+      {/* Cloud Account & Backup */}
+      <section className="bg-[#182020] border border-[#253230] rounded-3xl p-5 shadow-lg space-y-3.5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-[#CDFC39]" /> Sincronização & Conta na Nuvem
+          </h3>
+          <span className="text-[10px] text-[#CDFC39] font-mono bg-[#CDFC39]/15 border border-[#CDFC39]/30 px-2 py-0.5 rounded-full font-bold">
+            Supabase
+          </span>
+        </div>
+
+        {currentUser ? (
+          <div className="bg-[#131a19] border border-[#253230] rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+                  Conta Conectada
+                </span>
+                <span className="text-sm font-bold text-white">{currentUser.email}</span>
+              </div>
+              <span className="flex items-center gap-1 text-[11px] text-[#CDFC39] bg-[#CDFC39]/15 px-2.5 py-1 rounded-lg border border-[#CDFC39]/30 font-bold">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                Ativo
+              </span>
+            </div>
+
+            <button
+              onClick={async () => {
+                await authService.signOut();
+                setCurrentUser(null);
+              }}
+              className="w-full py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sair da Conta</span>
+            </button>
+          </div>
+        ) : (
+          <div className="bg-[#131a19] border border-[#253230] rounded-2xl p-4 space-y-3">
+            <p className="text-xs text-gray-300 leading-relaxed">
+              Crie ou conecte sua conta para fazer backup automático dos seus treinos, cargas e recordes pessoais na nuvem.
+            </p>
+
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="w-full py-3 rounded-xl bg-[#CDFC39] hover:bg-[#bbf224] text-black text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-[#CDFC39]/20 flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Cloud className="w-4 h-4" />
+              <span>Entrar ou Criar Conta</span>
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          onSuccess={(u) => {
+            setCurrentUser(u);
+            if (u.name) onUpdateName(u.name);
+          }}
+        />
+      )}
+
+      {/* Legal section */}
+      <section className="pt-2 pb-2">
+        <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500">
+          <button
+            type="button"
+            onClick={() => setLegalDoc("privacy")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Política de Privacidade
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => setLegalDoc("terms")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Termos de Uso
+          </button>
+        </div>
+        <p className="text-center text-[10px] text-gray-600 mt-2">
+          Titan-GyM v1.0.0 • suporte@titangym.app
+        </p>
+      </section>
+
+      {/* Legal Modal */}
+      {legalDoc && (
+        <LegalModal type={legalDoc} onClose={() => setLegalDoc(null)} />
       )}
     </div>
   );

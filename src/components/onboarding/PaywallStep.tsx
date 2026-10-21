@@ -4,7 +4,9 @@
  */
 
 import React, { useState } from "react";
-import { Check, X, ShieldCheck, Sparkles, Tag } from "lucide-react";
+import { Check, X, ShieldCheck, Sparkles, Tag, Loader2 } from "lucide-react";
+import { billingService } from "../../services/billing";
+import LegalModal from "../LegalModal";
 
 interface PaywallStepProps {
   selectedPlan: "annual" | "monthly";
@@ -22,11 +24,55 @@ export default function PaywallStep({
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [legalDoc, setLegalDoc] = useState<"privacy" | "terms" | null>(null);
+
+  const VALID_PROMO_CODES = ["TITAN100", "TITANGYM", "WELCOME"];
 
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (promoCode.trim().toLowerCase() === "titan100" || promoCode.trim().length >= 3) {
+    const code = promoCode.trim().toUpperCase();
+    if (VALID_PROMO_CODES.includes(code)) {
       setPromoApplied(true);
+      setStatusMessage("✓ Cupom de desconto aplicado com sucesso!");
+    } else {
+      setStatusMessage("Código promocional inválido ou expirado.");
+    }
+  };
+
+  const handlePurchase = async () => {
+    setIsProcessing(true);
+    setStatusMessage(null);
+    try {
+      const result = await billingService.purchasePlan(selectedPlan);
+      if (result.success) {
+        onConfirm(selectedPlan);
+      } else if (result.error) {
+        setStatusMessage(result.error);
+      }
+    } catch {
+      setStatusMessage("Erro ao processar compra. Tente novamente.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsProcessing(true);
+    setStatusMessage("Buscando assinaturas anteriores...");
+    try {
+      const res = await billingService.restorePurchases();
+      if (res.isPro) {
+        setStatusMessage("Assinatura restaurada com sucesso! Bem-vindo de volta.");
+        setTimeout(() => onConfirm(selectedPlan), 1200);
+      } else {
+        setStatusMessage("Nenhuma assinatura ativa encontrada para este dispositivo.");
+      }
+    } catch {
+      setStatusMessage("Falha ao restaurar compras.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -36,10 +82,12 @@ export default function PaywallStep({
       <header className="flex items-center justify-between pt-1 pb-3">
         <button
           type="button"
-          onClick={onSkip}
-          className="text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+          onClick={handleRestore}
+          disabled={isProcessing}
+          className="text-xs font-semibold text-gray-400 hover:text-white transition-colors flex items-center gap-1.5"
         >
-          Restaurar Compra
+          {isProcessing && <Loader2 className="w-3 h-3 animate-spin text-[#CDFC39]" />}
+          <span>Restaurar Compra</span>
         </button>
 
         <button
@@ -198,14 +246,29 @@ export default function PaywallStep({
         </div>
       </div>
 
+      {/* Status or Error Banner */}
+      {statusMessage && (
+        <div className="bg-[#182020] border border-[#CDFC39]/40 rounded-xl p-2.5 text-center text-xs text-white">
+          {statusMessage}
+        </div>
+      )}
+
       {/* Bottom Sticky Action */}
       <div className="pt-3 pb-2 flex flex-col gap-2">
         <button
           type="button"
-          onClick={() => onConfirm(selectedPlan)}
-          className="w-full py-4 px-6 rounded-2xl bg-[#CDFC39] hover:bg-[#bbf224] text-black font-extrabold text-base tracking-wide shadow-xl shadow-[#CDFC39]/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          onClick={handlePurchase}
+          disabled={isProcessing}
+          className="w-full py-4 px-6 rounded-2xl bg-[#CDFC39] hover:bg-[#bbf224] disabled:opacity-50 text-black font-extrabold text-base tracking-wide shadow-xl shadow-[#CDFC39]/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
-          <span>CONTINUAR COM PLANO {selectedPlan === "annual" ? "ANUAL" : "MENSAL"}</span>
+          {isProcessing ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>PROCESSANDO...</span>
+            </>
+          ) : (
+            <span>CONTINUAR COM PLANO {selectedPlan === "annual" ? "ANUAL" : "MENSAL"}</span>
+          )}
         </button>
 
         <button
@@ -220,7 +283,31 @@ export default function PaywallStep({
           <ShieldCheck className="w-3.5 h-3.5 text-[#CDFC39]" />
           <span>7 dias de garantia incondicional • Cancele quando quiser</span>
         </div>
+
+        {/* Legal links — required by Google Play */}
+        <div className="flex items-center justify-center gap-3 text-[11px] text-gray-500 pt-1">
+          <button
+            type="button"
+            onClick={() => setLegalDoc("privacy")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Política de Privacidade
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => setLegalDoc("terms")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Termos de Uso
+          </button>
+        </div>
       </div>
+
+      {/* Legal Modal */}
+      {legalDoc && (
+        <LegalModal type={legalDoc} onClose={() => setLegalDoc(null)} />
+      )}
     </div>
   );
 }

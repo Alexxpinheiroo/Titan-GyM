@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
-import { Check, X, Star, BarChart2, Award, Share2, EyeOff, Rocket, Trophy } from "lucide-react";
+import React, { useState } from "react";
+import { Check, X, Star, BarChart2, Award, Share2, EyeOff, Rocket, Trophy, Loader2, RotateCcw, ShieldCheck, Zap } from "lucide-react";
+import { billingService } from "../services/billing";
+import LegalModal from "./LegalModal";
 
 interface PlansTabProps {
   currentPlan: "free" | "pro";
@@ -12,6 +14,47 @@ interface PlansTabProps {
 }
 
 export default function PlansTab({ currentPlan, onSelectPlan }: PlansTabProps) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [selectedBillingCycle, setSelectedBillingCycle] = useState<"annual" | "monthly">("annual");
+  const [legalDoc, setLegalDoc] = useState<"privacy" | "terms" | null>(null);
+
+  const handleUpgrade = async () => {
+    if (currentPlan === "pro") return;
+    setIsProcessing(true);
+    setFeedback(null);
+    try {
+      const res = await billingService.purchasePlan(selectedBillingCycle);
+      if (res.success) {
+        onSelectPlan("pro");
+        setFeedback(`🎉 Parabéns! Titan PRO ${selectedBillingCycle === "annual" ? "Anual" : "Mensal"} ativado!`);
+      } else if (res.error) {
+        setFeedback(res.error);
+      }
+    } catch {
+      setFeedback("Erro ao processar compra. Tente novamente.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsProcessing(true);
+    setFeedback("Buscando assinaturas...");
+    try {
+      const res = await billingService.restorePurchases();
+      if (res.isPro) {
+        onSelectPlan("pro");
+        setFeedback("✓ Assinatura restaurada com sucesso!");
+      } else {
+        setFeedback("Nenhuma assinatura encontrada nesta conta.");
+      }
+    } catch {
+      setFeedback("Erro ao restaurar compras.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
   const freeBenefits = [
     { text: "Acesso básico à academia", included: true },
     { text: "Planos A/B padrão", included: true },
@@ -133,32 +176,105 @@ export default function PlansTab({ currentPlan, onSelectPlan }: PlansTabProps) {
           </ul>
 
           <button
-            onClick={() => onSelectPlan("pro")}
-            className={`w-full py-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-98 shadow-lg ${
+            onClick={handleUpgrade}
+            disabled={isProcessing || currentPlan === "pro"}
+            className={`w-full py-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-98 shadow-lg flex items-center justify-center gap-2 ${
               currentPlan === "pro"
                 ? "bg-[#CDFC39]/20 text-[#CDFC39] border border-[#CDFC39]/40 cursor-default"
                 : "bg-[#CDFC39] text-black hover:bg-[#bbf224] hover:shadow-[#CDFC39]/25"
             }`}
           >
-            {currentPlan === "pro" ? "VOCÊ É PRO 🔥" : "SEJA PRO AGORA"}
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>PROCESSANDO...</span>
+              </>
+            ) : currentPlan === "pro" ? (
+              "VOCÊ É PRO 🔥"
+            ) : (
+              "SEJA PRO AGORA"
+            )}
           </button>
         </div>
       </div>
 
-      {/* Bottom Gym Banner Card */}
+      {/* Billing cycle toggle — Annual vs Monthly */}
+      {currentPlan !== "pro" && (
+        <div className="bg-[#182020] border border-[#253230] rounded-2xl p-1.5 flex gap-1.5">
+          <button
+            onClick={() => setSelectedBillingCycle("annual")}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              selectedBillingCycle === "annual"
+                ? "bg-[#CDFC39] text-black shadow-md"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Anual — R$14,99/mês
+            <span className="block text-[9px] font-bold opacity-70 mt-0.5">R$179,90/ano · -58%</span>
+          </button>
+          <button
+            onClick={() => setSelectedBillingCycle("monthly")}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+              selectedBillingCycle === "monthly"
+                ? "bg-[#CDFC39] text-black shadow-md"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            Mensal — R$39,90
+            <span className="block text-[9px] font-bold opacity-70 mt-0.5">Cancele quando quiser</span>
+          </button>
+        </div>
+      )}
+
+      {/* Feedback banner */}
+      {feedback && (
+        <div className="bg-[#182020] border border-[#CDFC39]/40 rounded-2xl p-3 text-center text-xs text-[#CDFC39] font-bold">
+          {feedback}
+        </div>
+      )}
+
+      {/* Restore Purchases & Google Play Guarantee */}
+      <div className="flex flex-col items-center gap-2 pt-1 text-center">
+        <button
+          onClick={handleRestore}
+          disabled={isProcessing}
+          className="text-xs font-bold text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors py-1"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Restaurar Assinatura Existente</span>
+        </button>
+
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#CDFC39]" />
+          <span>Faturamento seguro via Google Play • Cancele a qualquer momento</span>
+        </div>
+
+        <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500 pt-1">
+          <button
+            type="button"
+            onClick={() => setLegalDoc("privacy")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Política de Privacidade
+          </button>
+          <span>•</span>
+          <button
+            type="button"
+            onClick={() => setLegalDoc("terms")}
+            className="underline hover:text-gray-300 transition-colors"
+          >
+            Termos de Uso
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Gym Banner Card — local asset */}
       <section className="relative h-48 rounded-3xl overflow-hidden group shadow-xl border border-[#253230] bg-[#111616]">
-        {/* Cover Background Image */}
         <div
           className="absolute inset-0 bg-cover bg-center opacity-65 transition-transform duration-500 group-hover:scale-105"
-          style={{
-            backgroundImage: `url('https://lh3.googleusercontent.com/aida-public/AB6AXuCZ2wn3vDV0aGYObI_CM9OYrh1SdwB8Ntn8--Dmrq-g91zrs0tP-21YwFOtp4runZL4h_pv-f7R61HNVMC7810VyyjbqIWZDxAte9uBwdQXxqlOz3p2ZKFNWMPQio9YO28Enn_niVBq8Pz5EsMOhS-5yXHwGUBFZHBgCAyoqkmEsI-_2DgPqwA9ncyoeGJdpxYhSWpKF7QHvsi9BkTVtpQPo5sQE01QQ-WEdf_rYDXLihXvmnGlUQ7r')`,
-          }}
-        ></div>
-
-        {/* Gradient Mask */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#111616] via-[#111616]/45 to-transparent"></div>
-
-        {/* Content Overlay */}
+          style={{ backgroundImage: `url('/store_assets/splash_vertical_1080x1920.png')` }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#111616] via-[#111616]/45 to-transparent" />
         <div className="absolute inset-0 p-6 flex flex-col justify-end text-left">
           <h3 className="text-xl font-black text-white font-display tracking-tight leading-none uppercase">
             TREINE COMO UM TITÃ
@@ -168,6 +284,8 @@ export default function PlansTab({ currentPlan, onSelectPlan }: PlansTabProps) {
           </p>
         </div>
       </section>
+
+      {legalDoc && <LegalModal type={legalDoc} onClose={() => setLegalDoc(null)} />}
     </div>
   );
 }

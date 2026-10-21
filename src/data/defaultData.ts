@@ -7,15 +7,15 @@ import { UserProfile, DailyMetrics, WorkoutRoutine, WorkoutStrategy, LoadLog } f
 
 export const defaultProfile: UserProfile = {
   name: "Guerreiro",
-  streakDays: 12,
-  avatarUrl: "https://lh3.googleusercontent.com/aida-public/AB6AXuCUM-f_ccGphylIpNlxxIRxaEbbRmMz4UwuS4319riOQOAEeR9BXlRS453HgRI__RY6n4vJiVY-KzRIjfsi5r7eBxad2lKHhjMpnCZC7p9YjaBxuLZKSIXlYz1aupsJDisacrVl4vuyt9_4gJsnFeleShUPBHFFCUNWr5-_UyQcfqru6KqgD5pxscna5I_bS8kihgOExFLBaP1tGkA9bxKXrWymzBVL0e6l_3PUKU3nuIGfBymMHVJq"
+  streakDays: 0,
+  avatarUrl: "/icon-192.png",
 };
 
 export const defaultMetrics: DailyMetrics = {
-  calories: 2450,
-  activeMinutes: 260, // 4h 20m
-  totalVolumeTons: 12.5,
-  weeklyScorePercent: 15
+  calories: 0,
+  activeMinutes: 0,
+  totalVolumeTons: 0,
+  weeklyScorePercent: 0,
 };
 
 export const defaultRoutines: WorkoutRoutine[] = [

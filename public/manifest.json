@@ -1,0 +1,24 @@
+{
+  "short_name": "Titan Gym",
+  "name": "Titan Gym - Treino de Força e Cargas",
+  "description": "Acompanhe seus recordes, evolução de cargas e conquiste resultados reais com o Titan Gym.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#111616",
+  "theme_color": "#111616",
+  "display": "standalone",
+  "orientation": "portrait"
+}

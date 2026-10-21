@@ -21,7 +21,7 @@ export default function BottomNavBar({ activeTab, onTabChange }: BottomNavBarPro
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#131a19]/95 backdrop-blur-lg border-t border-[#253230] flex justify-around items-center px-4 py-2 pb-safe h-20 shadow-2xl">
+    <nav className="fixed bottom-0 left-0 w-full z-40 bg-[#131a19]/95 backdrop-blur-lg border-t border-[#253230] flex justify-around items-center px-4 pt-2 pb-safe min-h-20 shadow-2xl">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeTab === item.id;

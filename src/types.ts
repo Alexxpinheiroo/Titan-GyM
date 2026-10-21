@@ -22,6 +22,13 @@ export interface Exercise {
   lastLoad: string; // can be "38", "22", "BW+5"
   imgUrl: string;
   muscleGroup: string;
+  videoUrl?: string;
+  instructions?: string[];
+  importantTips?: string[];
+  secondaryMuscles?: string[];
+  equipment?: string;
+  category?: string;
+  level?: string;
 }
 
 export interface WorkoutRoutine {

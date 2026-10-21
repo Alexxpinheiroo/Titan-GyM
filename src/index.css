@@ -55,6 +55,26 @@
   animation: confettiFall 3s linear forwards;
 }
 
+/* Mobile Safe Area utilities */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.mt-safe {
+  margin-top: env(safe-area-inset-top, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Tonal layer properties */
 body {
   background-color: #111616;
@@ -62,7 +82,18 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  min-height: 100dvh;
   transition: background-color 0.25s ease, color 0.25s ease;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 
 /* ==========================================================================

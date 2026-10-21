@@ -15,6 +15,7 @@ import ActiveWorkoutScreen from "./components/ActiveWorkoutScreen";
 import CelebrationOverlay from "./components/CelebrationOverlay";
 import OnboardingFlow from "./components/onboarding/OnboardingFlow";
 import { useTheme } from "./hooks/useTheme";
+import { useMobileNative } from "./hooks/useMobileNative";
 
 import {
   defaultProfile,
@@ -24,6 +25,7 @@ import {
   defaultLogs,
 } from "./data/defaultData";
 import { UserProfile, DailyMetrics, WorkoutRoutine, WorkoutStrategy, LoadLog, OnboardingData } from "./types";
+import { billingService } from "./services/billing";
 
 export default function App() {
   // Color scheme & theme preference hook (prefers-color-scheme + manual toggle)
@@ -89,6 +91,34 @@ export default function App() {
     message: "",
     subMessage: "",
   });
+
+  // Native Android hardware back button and status bar theme handler
+  useMobileNative({
+    resolvedTheme,
+    onHardwareBack: () => {
+      // 1. If celebration modal is active, dismiss it
+      if (celebration.visible) {
+        setCelebration((prev) => ({ ...prev, visible: false }));
+        return true;
+      }
+      // 2. If active workout is running, prevent accidental app exit
+      if (activeWorkout) {
+        return true;
+      }
+      // 3. If on a sub-tab, go back to home tab
+      if (activeTab !== "home") {
+        setActiveTab("home");
+        return true;
+      }
+      // 4. On home screen with no overlays, allow default back behavior (exit app)
+      return false;
+    },
+  });
+
+  // Initialize RevenueCat and Google Play Billing
+  useEffect(() => {
+    billingService.initialize();
+  }, []);
 
   // Save states to local storage on modifications
   useEffect(() => {
@@ -184,17 +214,23 @@ export default function App() {
   };
 
   const handleQuickStart = () => {
-    // Starts the first workout routine directly
-    setActiveWorkout(routines[0]);
+    // Guard: only start if we have at least one routine
+    if (routines && routines.length > 0) {
+      setActiveWorkout(routines[0]);
+    }
   };
 
   // Workout strategies and records logging
   const handleLogLoad = (exerciseId: string, loadKg: number, reps: number, notes?: string) => {
-    const sessionNum = logs.filter(l => l.exerciseId === exerciseId).length + 17;
+    // sessionNum = real count of prior logs for this exercise (1-indexed)
+    const sessionNum = logs.filter(l => l.exerciseId === exerciseId).length + 1;
+    // dateStr: ISO date string YYYY-MM-DD for proper chronological sorting
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
     const newLog: LoadLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       exerciseId,
-      dateStr: "Hoje",
+      dateStr,
       sessionNum,
       loadKg,
       reps,
@@ -338,6 +374,9 @@ export default function App() {
           <DashboardTab
             metrics={metrics}
             profile={profile}
+            todayRoutine={routines[0]}
+            onStartTodayWorkout={() => setActiveWorkout(routines[0])}
+            onGoToWorkouts={() => setActiveTab("workouts")}
             onSelectFocus={handleSelectFocus}
             onQuickStart={handleQuickStart}
           />

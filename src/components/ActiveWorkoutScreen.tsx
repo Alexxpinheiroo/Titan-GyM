@@ -20,11 +20,15 @@ import {
   ChevronRight,
   Flame,
   Volume2,
+  VolumeX,
+  Info,
   FileText,
   Edit3,
   MessageSquare
 } from "lucide-react";
 import { WorkoutRoutine, Exercise } from "../types";
+import { Haptics, NotificationType, ImpactStyle } from "@capacitor/haptics";
+import ExerciseDetailModal from "./ExerciseDetailModal";
 
 interface ActiveWorkoutScreenProps {
   routine: WorkoutRoutine;
@@ -81,6 +85,28 @@ export default function ActiveWorkoutScreen({
   const [isResting, setIsResting] = useState(false);
   const [restContext, setRestContext] = useState<RestContextInfo | null>(null);
 
+  // Exercise Guide modal state
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  // Sound effects preference
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("titan_sound_enabled") !== "false";
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleSound = () => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("titan_sound_enabled", String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   // Interactive set customization (load / reps)
   const [setLoad, setSetLoad] = useState<number>(() => {
     const raw = currentExercise.currentLoad.replace(/[^\d.]/g, "");
@@ -101,6 +127,7 @@ export default function ActiveWorkoutScreen({
     }
   });
   const [editingNoteExerciseId, setEditingNoteExerciseId] = useState<string | null>(null);
+  const [showNotesInput, setShowNotesInput] = useState(false);
 
   useEffect(() => {
     try {
@@ -141,17 +168,81 @@ export default function ActiveWorkoutScreen({
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const workoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const restTargetTimestampRef = useRef<number | null>(null);
+  const workoutStartTimestampRef = useRef<number>(Date.now());
+  const shortBeepAudioRef = useRef<HTMLAudioElement | null>(null);
+  const fullBeepAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastBeepSecondRef = useRef<number | null>(null);
+
+  // Preload audio files for zero-latency playback
+  useEffect(() => {
+    try {
+      const shortBeep = new Audio("/sounds/short-beep.mp3");
+      const fullBeep = new Audio("/sounds/beep.mp3");
+      shortBeep.preload = "auto";
+      fullBeep.preload = "auto";
+      shortBeepAudioRef.current = shortBeep;
+      fullBeepAudioRef.current = fullBeep;
+    } catch {}
+  }, []);
 
   const [quitConfirmType, setQuitConfirmType] = useState<"prev" | "home" | "quit" | null>(null);
 
-  // Sound chime synthesizer via Web Audio API
-  const playRestCompleteChime = () => {
+  // Screen Wake Lock API to prevent phone display from sleeping during an active training session
+  useEffect(() => {
+    let wakeLockSentinel: any = null;
+
+    async function requestWakeLock() {
+      if ("wakeLock" in navigator) {
+        try {
+          wakeLockSentinel = await (navigator as any).wakeLock.request("screen");
+        } catch {
+          // Wake lock unavailable or denied
+        }
+      }
+    }
+
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+      }
+    };
+  }, []);
+
+  // Countdown short beep (3, 2, 1)
+  const playCountdownBeep = () => {
+    if (!soundEnabled) return;
+    try {
+      if (shortBeepAudioRef.current) {
+        shortBeepAudioRef.current.currentTime = 0;
+        shortBeepAudioRef.current.play().catch(() => {});
+      }
+      try {
+        Haptics.impact({ style: ImpactStyle.Light });
+      } catch {
+        if (navigator.vibrate) navigator.vibrate(40);
+      }
+    } catch {}
+  };
+
+  // Sound chime synthesizer fallback
+  const playSynthesizedChime = () => {
     try {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtxClass) return;
       const ctx = new AudioCtxClass();
       
-      // Two-tone cheerful notification
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.connect(gain1);
@@ -171,12 +262,32 @@ export default function ActiveWorkoutScreen({
       gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
       osc2.start(ctx.currentTime + 0.2);
       osc2.stop(ctx.currentTime + 0.55);
+    } catch {}
+  };
 
-      if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200]);
+  // Sound chime with native haptic motor feedback
+  const playRestCompleteChime = () => {
+    try {
+      try {
+        Haptics.notification({ type: NotificationType.Success });
+      } catch {
+        if (navigator.vibrate) {
+          navigator.vibrate([200, 100, 200]);
+        }
+      }
+
+      if (soundEnabled) {
+        if (fullBeepAudioRef.current) {
+          fullBeepAudioRef.current.currentTime = 0;
+          fullBeepAudioRef.current.play().catch(() => {
+            playSynthesizedChime();
+          });
+        } else {
+          playSynthesizedChime();
+        }
       }
     } catch {
-      // Audio context restricted or unavailable
+      if (soundEnabled) playSynthesizedChime();
     }
   };
 
@@ -197,10 +308,12 @@ export default function ActiveWorkoutScreen({
     }
   }, [currentExerciseIndex]);
 
-  // Workout duration timer
+  // Workout duration timer (drift-free using Date.now())
   useEffect(() => {
+    workoutStartTimestampRef.current = Date.now() - workoutSeconds * 1000;
     workoutTimerRef.current = setInterval(() => {
-      setWorkoutSeconds((prev) => prev + 1);
+      const elapsed = Math.max(0, Math.floor((Date.now() - workoutStartTimestampRef.current) / 1000));
+      setWorkoutSeconds(elapsed);
     }, 1000);
 
     return () => {
@@ -208,27 +321,51 @@ export default function ActiveWorkoutScreen({
     };
   }, []);
 
-  // Automatic rest countdown timer
+  // Automatic rest countdown timer (resilient to screen lock / app switching via target timestamp)
   useEffect(() => {
     if (isResting && isTimerRunning) {
-      timerRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            // Timer expired!
-            clearInterval(timerRef.current!);
-            setIsTimerRunning(false);
-            setIsResting(false);
-            playRestCompleteChime();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
+      restTargetTimestampRef.current = Date.now() + timeLeft * 1000;
 
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+      const tick = () => {
+        if (!restTargetTimestampRef.current) return;
+        const diff = Math.ceil((restTargetTimestampRef.current - Date.now()) / 1000);
+        if (diff <= 0) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          setTimeLeft(0);
+          setIsTimerRunning(false);
+          setIsResting(false);
+          restTargetTimestampRef.current = null;
+          lastBeepSecondRef.current = null;
+          playRestCompleteChime();
+        } else {
+          // Play countdown short beep on seconds 3, 2, 1
+          if (diff <= 3 && diff >= 1 && lastBeepSecondRef.current !== diff) {
+            lastBeepSecondRef.current = diff;
+            playCountdownBeep();
+          }
+          setTimeLeft(diff);
+        }
+      };
+
+      timerRef.current = setInterval(tick, 1000);
+
+      // Instantly re-synchronize timer when user returns from another app (e.g. Spotify)
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          tick();
+        }
+      };
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
+    } else {
+      restTargetTimestampRef.current = null;
+      lastBeepSecondRef.current = null;
+    }
   }, [isResting, isTimerRunning]);
 
   // Format workout time
@@ -252,16 +389,26 @@ export default function ActiveWorkoutScreen({
 
   const resetTimer = () => {
     setTimeLeft(totalRestTime);
+    restTargetTimestampRef.current = Date.now() + totalRestTime * 1000;
     setIsTimerRunning(true);
   };
 
   const addTime = (seconds: number = 30) => {
+    if (restTargetTimestampRef.current) {
+      restTargetTimestampRef.current += seconds * 1000;
+    }
     setTimeLeft((prev) => prev + seconds);
     setTotalRestTime((prev) => Math.max(prev, prev + seconds));
   };
 
   const subtractTime = (seconds: number = 15) => {
-    setTimeLeft((prev) => Math.max(5, prev - seconds));
+    setTimeLeft((prev) => {
+      const updated = Math.max(5, prev - seconds);
+      if (restTargetTimestampRef.current) {
+        restTargetTimestampRef.current = Date.now() + updated * 1000;
+      }
+      return updated;
+    });
   };
 
   const setCustomRestDuration = (seconds: number) => {
@@ -495,9 +642,9 @@ export default function ActiveWorkoutScreen({
   const upcomingReps = restContext ? restContext.nextReps : currentExercise.reps;
 
   return (
-    <div className="fixed inset-0 bg-[#111616] text-[#e2e2e2] z-40 overflow-y-auto pb-24 flex flex-col font-sans animate-slide-up">
+    <div className="fixed inset-0 bg-[#111616] text-[#e2e2e2] z-40 overflow-y-auto pb-safe flex flex-col font-sans animate-slide-up">
       {/* Top Header */}
-      <header className="sticky top-0 bg-[#111616]/95 backdrop-blur-md border-b border-[#253230] flex items-center justify-between px-4 py-3 z-30 w-full min-h-[4rem]">
+      <header className="sticky top-0 bg-[#111616]/95 backdrop-blur-md border-b border-[#253230] flex items-center justify-between px-4 py-3 pt-safe z-30 w-full min-h-[4rem]">
         {/* Left: Cancel Workout */}
         <button
           onClick={handleQuitWorkout}
@@ -553,11 +700,35 @@ export default function ActiveWorkoutScreen({
               <Timer className="w-3 h-3 text-[#CDFC39]" />
               <span>Auto-descanso: {autoRestEnabled ? "ON" : "OFF"}</span>
             </button>
+
+            {/* Sound toggle button */}
+            <button
+              onClick={toggleSound}
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
+                soundEnabled
+                  ? "bg-[#182020] text-[#CDFC39] border-[#CDFC39]/40"
+                  : "bg-[#182020] text-gray-400 border-[#253230]"
+              }`}
+              title={soundEnabled ? "Som ativado (Beeps 3-2-1)" : "Som desativado"}
+            >
+              {soundEnabled ? <Volume2 className="w-3 h-3 text-[#CDFC39]" /> : <VolumeX className="w-3 h-3" />}
+              <span>{soundEnabled ? "Som ON" : "Mudo"}</span>
+            </button>
           </div>
 
-          <h1 className="text-2xl font-bold text-white leading-tight font-display">
-            {currentExercise.name}
-          </h1>
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-2xl font-bold text-white leading-tight font-display">
+              {currentExercise.name}
+            </h1>
+            <button
+              onClick={() => setShowGuideModal(true)}
+              className="p-1.5 rounded-xl bg-[#182020] hover:bg-[#253230] text-[#CDFC39] border border-[#253230] hover:border-[#CDFC39]/40 transition-all active:scale-95 flex items-center gap-1"
+              title="Ver vídeo, postura e instruções deste exercício"
+            >
+              <Info className="w-4 h-4" />
+              <span className="text-[10px] font-black uppercase hidden sm:inline">Guia</span>
+            </button>
+          </div>
 
           <div className="flex justify-center items-center gap-2 flex-wrap">
             <span className="px-3 py-1 rounded-full bg-[#182020] border border-[#253230] text-[11px] font-bold text-gray-300 tracking-wider">
@@ -747,130 +918,121 @@ export default function ActiveWorkoutScreen({
               </button>
             </div>
           ) : (
-            /* ================= ACTIVE EXERCISE SET ENTRY VIEW ================= */
-            <div className="bg-[#182020] border border-[#253230] rounded-3xl p-6 w-full max-w-sm flex flex-col gap-5 shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 left-0 h-1 bg-[#CDFC39] w-full"></div>
+            /* ================= ACTIVE EXERCISE SET ENTRY VIEW (High-accessibility) ================= */
+            <div className="bg-[#182020] border-2 border-[#CDFC39]/50 rounded-3xl p-5 sm:p-6 w-full max-w-md flex flex-col gap-4 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 h-1.5 bg-[#CDFC39] w-full"></div>
 
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-                  Configuração do Set
-                </span>
-                <div className="flex items-center gap-1.5 text-xs text-gray-300 bg-[#131a19] border border-[#253230] px-2.5 py-1 rounded-md">
-                  <span className="font-semibold text-[#CDFC39]">Meta:</span>
-                  <span>
-                    {currentExercise.targetLoad}
-                    {currentExercise.targetLoad.includes("BW") ? "" : "kg"} x {currentExercise.reps} ({currentExercise.restDisplay || `${currentExercise.restSeconds}s`})
+              <div className="flex justify-between items-center pb-1 border-b border-[#253230]">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-[#CDFC39] text-black font-black text-sm flex items-center justify-center font-display">
+                    {currentSetIndex + 1}
                   </span>
+                  <span className="text-sm font-black text-white uppercase tracking-wider">
+                    Série {currentSetIndex + 1} de {totalSets}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-300 bg-[#131a19] border border-[#253230] px-3 py-1 rounded-lg">
+                  <span className="text-[#CDFC39] font-bold">Meta: </span>
+                  <span className="font-bold">{currentExercise.targetLoad}kg x {currentExercise.reps}</span>
                 </div>
               </div>
 
-              {/* Load input */}
-              <div className="flex justify-between items-center bg-[#131a19] p-3.5 rounded-2xl border border-[#253230]">
+              {/* Load input (56px touch buttons) */}
+              <div className="flex justify-between items-center bg-[#131a19] p-3.5 sm:p-4 rounded-2xl border border-[#253230]">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Carga (kg)</span>
-                  <span className="text-2xl font-mono font-black text-white">{setLoad} kg</span>
+                  <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Peso / Carga</span>
+                  <span className="text-3xl font-mono font-black text-white mt-0.5">
+                    {setLoad} <span className="text-base font-sans font-bold text-[#CDFC39]">kg</span>
+                  </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSetLoad((prev) => Math.max(0, prev - 2))}
-                    className="w-10 h-10 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-lg flex items-center justify-center font-bold text-lg text-white transition-all active:scale-90"
+                    className="w-14 h-14 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-2xl flex items-center justify-center font-black text-3xl text-white transition-all active:scale-90 shadow-sm"
+                    aria-label="Diminuir carga"
                   >
                     -
                   </button>
                   <button
                     onClick={() => setSetLoad((prev) => prev + 2)}
-                    className="w-10 h-10 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-lg flex items-center justify-center font-bold text-lg text-white transition-all active:scale-90"
+                    className="w-14 h-14 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-2xl flex items-center justify-center font-black text-3xl text-white transition-all active:scale-90 shadow-sm"
+                    aria-label="Aumentar carga"
                   >
                     +
                   </button>
                 </div>
               </div>
 
-              {/* Reps input */}
-              <div className="flex justify-between items-center bg-[#131a19] p-3.5 rounded-2xl border border-[#253230]">
+              {/* Reps input (56px touch buttons) */}
+              <div className="flex justify-between items-center bg-[#131a19] p-3.5 sm:p-4 rounded-2xl border border-[#253230]">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-gray-400 font-bold uppercase">Repetições</span>
-                  <span className="text-2xl font-mono font-black text-white">{setReps} reps</span>
+                  <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Repetições</span>
+                  <span className="text-3xl font-mono font-black text-white mt-0.5">
+                    {setReps} <span className="text-base font-sans font-bold text-gray-400">reps</span>
+                  </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSetReps((prev) => Math.max(1, prev - 1))}
-                    className="w-10 h-10 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-lg flex items-center justify-center font-bold text-lg text-white transition-all active:scale-90"
+                    className="w-14 h-14 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-2xl flex items-center justify-center font-black text-3xl text-white transition-all active:scale-90 shadow-sm"
+                    aria-label="Diminuir repetições"
                   >
                     -
                   </button>
                   <button
                     onClick={() => setSetReps((prev) => prev + 1)}
-                    className="w-10 h-10 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-lg flex items-center justify-center font-bold text-lg text-white transition-all active:scale-90"
+                    className="w-14 h-14 bg-[#1f2a29] border border-[#253230] hover:bg-[#CDFC39] hover:text-black rounded-2xl flex items-center justify-center font-black text-3xl text-white transition-all active:scale-90 shadow-sm"
+                    aria-label="Aumentar repetições"
                   >
                     +
                   </button>
                 </div>
               </div>
 
-              {/* Sensation & Difficulty Notes Input */}
-              <div className="bg-[#131a19] p-3.5 rounded-2xl border border-[#253230] space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor={`notes-input-${currentExercise.id}`}
-                    className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center gap-1.5"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-[#CDFC39]" />
-                    <span>Sensações ou Dificuldades</span>
-                  </label>
-                  {currentNote ? (
-                    <span className="text-[10px] text-[#CDFC39] font-semibold bg-[#CDFC39]/10 border border-[#CDFC39]/30 px-2 py-0.5 rounded-md flex items-center gap-1">
-                      <Check className="w-2.5 h-2.5" /> Salva no log
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-gray-500 italic">
-                      Opcional
-                    </span>
-                  )}
-                </div>
+              {/* BIG CONCLUIR SÉRIE PRIMARY CTA */}
+              <button
+                onClick={handleConcluirSet}
+                className="w-full min-h-[3.75rem] bg-[#CDFC39] hover:bg-[#bbf224] text-black font-black text-base uppercase tracking-wider rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-[#CDFC39]/25 active:scale-98 transition-all"
+                id="btn-complete-set"
+              >
+                <Check className="w-6 h-6 stroke-[3]" />
+                <span>CONCLUIR SÉRIE {currentSetIndex + 1} DE {totalSets}</span>
+              </button>
 
-                <textarea
-                  id={`notes-input-${currentExercise.id}`}
-                  rows={2}
-                  value={currentNote}
-                  onChange={(e) => handleUpdateNote(currentExercise.id, e.target.value)}
-                  placeholder="Anote sensações, esforço, falha muscular ou desconforto articular..."
-                  className="w-full bg-[#182020] border border-[#253230] rounded-xl p-2.5 text-xs text-white placeholder:text-gray-500 focus:border-[#CDFC39] focus:outline-none resize-none transition-colors"
-                />
+              {/* Collapsible optional notes */}
+              <div className="pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowNotesInput(!showNotesInput)}
+                  className="w-full text-xs text-gray-400 hover:text-white flex items-center justify-center gap-1.5 py-1 transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#CDFC39]" />
+                  <span>{showNotesInput ? "Ocultar anotação" : "Adicionar anotação da série (opcional)"}</span>
+                </button>
 
-                {/* Quick sensation chips */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {[
-                    "🔥 Bom pump",
-                    "⚡ Falha concêntrica",
-                    "🟢 Carga leve (subir)",
-                    "⚠️ Desconforto articular",
-                    "🎯 Boa cadência",
-                    "😮‍💨 Muito pesado",
-                  ].map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => handleAppendTagToNote(currentExercise.id, tag)}
-                      className="text-[10px] px-2.5 py-1 rounded-lg bg-[#182020] hover:bg-[#253230] text-gray-300 hover:text-white border border-[#253230] transition-colors active:scale-95"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
+                {showNotesInput && (
+                  <div className="bg-[#131a19] p-3 rounded-2xl border border-[#253230] space-y-2 mt-2">
+                    <textarea
+                      id={`notes-input-${currentExercise.id}`}
+                      rows={2}
+                      value={currentNote}
+                      onChange={(e) => handleUpdateNote(currentExercise.id, e.target.value)}
+                      placeholder="Anote sensações, esforço ou ajustes..."
+                      className="w-full bg-[#182020] border border-[#253230] rounded-xl p-2.5 text-xs text-white placeholder:text-gray-500 focus:border-[#CDFC39] focus:outline-none resize-none transition-colors"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Direct "Complete Exercise" option */}
-              <div className="pt-1">
-                <button
-                  onClick={() => handleCompleteEntireExercise(currentExerciseIndex)}
-                  className="w-full bg-[#131a19] hover:bg-[#1f2a29] border border-[#253230] hover:border-[#CDFC39]/40 text-gray-300 hover:text-white py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
-                  title="Concluir todas as séries deste exercício de uma vez e iniciar o descanso automático"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#CDFC39]" />
-                  <span>Marcar Exercício Inteiro como Concluído</span>
-                </button>
-              </div>
+              <button
+                onClick={() => handleCompleteEntireExercise(currentExerciseIndex)}
+                className="w-full text-xs text-gray-400 hover:text-white py-1 flex items-center justify-center gap-1.5 transition-colors"
+                title="Pular direto para o próximo exercício marcando todas as séries como feitas"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#CDFC39]" />
+                <span>Marcar restante deste exercício como concluído</span>
+              </button>
             </div>
           )}
         </section>
@@ -879,39 +1041,15 @@ export default function ActiveWorkoutScreen({
         <section className="space-y-3">
           <div className="flex justify-between items-end mb-2">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Dumbbell className="w-4 h-4 text-[#CDFC39]" /> Séries do Exercício
+              <Dumbbell className="w-4 h-4 text-[#CDFC39]" /> Progresso das Séries
             </h2>
             <span className="text-xs text-gray-400">
-              Total: {totalSets} x {currentExercise.reps}
+              Total: {totalSets} séries
             </span>
           </div>
 
           <div className="space-y-2.5">
-            {/* Active set card */}
-            {!isResting ? (
-              <div className="p-4 rounded-2xl bg-[#182020] border-l-4 border-l-[#CDFC39] flex items-center justify-between border border-[#253230] shadow-md">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#CDFC39]/15 flex items-center justify-center border border-[#CDFC39]/30">
-                    <span className="font-mono font-black text-[#CDFC39] text-base">
-                      {currentSetIndex + 1}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">Série Atual {currentSetIndex + 1} de {totalSets}</p>
-                    <p className="text-xs text-gray-400 font-mono">
-                      {setLoad} kg • {setReps} reps
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleConcluirSet}
-                  className="bg-[#CDFC39] hover:bg-[#bbf224] text-black px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg shadow-[#CDFC39]/25 flex items-center gap-1.5"
-                  id="btn-complete-set"
-                >
-                  <Check className="w-4 h-4 stroke-[3]" /> CONCLUIR
-                </button>
-              </div>
-            ) : (
+            {isResting && (
               <div className="p-4 rounded-2xl bg-[#182020]/60 border border-dashed border-[#CDFC39]/30 text-center text-xs text-gray-300 flex items-center justify-center gap-2 py-5 shadow-sm">
                 <Timer className="w-4 h-4 text-[#CDFC39] animate-pulse" />
                 <span>
@@ -919,6 +1057,25 @@ export default function ActiveWorkoutScreen({
                 </span>
               </div>
             )}
+
+            {/* Previously completed sets in this session */}
+            {Array.from({ length: currentSetIndex }).map((_, i) => (
+              <div
+                key={`completed-set-${i}`}
+                className="p-3.5 rounded-xl bg-[#182020]/70 border border-[#253230] flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[#CDFC39]/15 text-[#CDFC39] flex items-center justify-center font-bold text-xs border border-[#CDFC39]/30">
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white">Série {i + 1} Concluída</p>
+                    <p className="text-[11px] text-gray-400 font-mono">Registrado com sucesso</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-[#CDFC39]">Feito</span>
+              </div>
+            ))}
 
             {/* Upcoming items previews */}
             {Array.from({ length: totalSets }).map((_, i) => {
@@ -1193,6 +1350,14 @@ export default function ActiveWorkoutScreen({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Exercise Detail / Guide Modal */}
+      {showGuideModal && (
+        <ExerciseDetailModal
+          exercise={currentExercise}
+          onClose={() => setShowGuideModal(false)}
+        />
       )}
     </div>
   );

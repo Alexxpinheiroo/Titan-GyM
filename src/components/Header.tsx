@@ -34,7 +34,7 @@ export default function Header({
 
   return (
     <>
-      <header className="w-full sticky top-0 z-40 bg-[#111616]/95 backdrop-blur-md border-b border-[#253230] flex justify-between items-center px-4 sm:px-6 h-16 transition-colors">
+      <header className="w-full sticky top-0 z-40 bg-[#111616]/95 backdrop-blur-md border-b border-[#253230] flex justify-between items-center px-4 sm:px-6 pt-safe min-h-16 transition-colors">
         <div 
           onClick={onGoToHome}
           className="flex items-center gap-3 cursor-pointer group hover:opacity-90 select-none"
@@ -43,8 +43,8 @@ export default function Header({
         >
           <img
             alt="Titan Gym Logo"
-            className="w-10 h-10 object-contain group-hover:scale-105 transition-transform"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjmw4lFNwPIYgLNezP__Z_DY9J--EubxiCb3reAQiXKm3i3IrbZ-tp61aBc6yr0NV0GPJ1RAr4ILGPePKExo9qCHAbcgOvVlmv7W50M3ym75YbGqeglr1d9XTlRcRvHUEWUQAkXz3MNf-mXT7I6FYWjdkYuQiEsDKIgjzmsZDJnUVH1P0S4weisYER1FrLGiuEAsXbuEGZE9WSsL0DrJ3tY8Y9_oZb7E4_s8oyi_2ZNtNXFtla5LAK"
+            className="w-10 h-10 object-contain group-hover:scale-105 transition-transform rounded-xl"
+            src="/icon-192.png"
           />
           <span className="font-sans text-[22px] sm:text-[24px] font-black tracking-tighter text-white group-hover:text-[#CDFC39] transition-colors">
             TITAN GYM

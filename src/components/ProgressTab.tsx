@@ -53,10 +53,14 @@ export default function ProgressTab({ logs, routines, onAddLog }: ProgressTabPro
       return a.sessionNum - b.sessionNum;
     });
 
-  // Calculate statistics
-  const initialLoad = exerciseLogs[0]?.loadKg || 30;
-  const currentLoad = exerciseLogs[exerciseLogs.length - 1]?.loadKg || 45;
-  const evolution = currentLoad - initialLoad;
+  // Calculate statistics cleanly
+  const hasLogs = exerciseLogs.length > 0;
+  const initialLoad = hasLogs ? exerciseLogs[0].loadKg : 0;
+  const currentLoad = hasLogs ? exerciseLogs[exerciseLogs.length - 1].loadKg : 0;
+  const evolution = hasLogs ? currentLoad - initialLoad : 0;
+  const evolutionPercent = hasLogs && initialLoad > 0 
+    ? (((currentLoad - initialLoad) / initialLoad) * 100).toFixed(0) 
+    : "0";
 
   // Calculate coordinates for SVG chart
   const paddingX = 40;
@@ -168,14 +172,20 @@ export default function ProgressTab({ logs, routines, onAddLog }: ProgressTabPro
               Carga Máxima
             </span>
             <span className="text-3xl font-sans font-black text-[#CDFC39] tracking-tight mt-0.5">
-              {currentLoad}
-              <small className="text-lg font-normal text-gray-400 ml-0.5">kg</small>
+              {hasLogs ? currentLoad : "--"}
+              {hasLogs && <small className="text-lg font-normal text-gray-400 ml-0.5">kg</small>}
             </span>
           </div>
           <div className="text-right">
-            <span className="bg-[#CDFC39]/15 text-[#CDFC39] border border-[#CDFC39]/30 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider">
-              +{(((currentLoad - initialLoad) / initialLoad) * 100).toFixed(0)}% Evolução
-            </span>
+            {hasLogs ? (
+              <span className="bg-[#CDFC39]/15 text-[#CDFC39] border border-[#CDFC39]/30 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider">
+                {evolution >= 0 ? `+${evolutionPercent}%` : `${evolutionPercent}%`} Evolução
+              </span>
+            ) : (
+              <span className="bg-[#1f2a29] text-gray-400 border border-[#253230] px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider">
+                Sem registros
+              </span>
+            )}
           </div>
         </div>
 
