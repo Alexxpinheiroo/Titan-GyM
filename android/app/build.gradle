@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.alexxpinheiroo.titangym"
+    namespace "com.titangym.fitness"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.alexxpinheiroo.titangym"
+        applicationId "com.titangym.fitness"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
