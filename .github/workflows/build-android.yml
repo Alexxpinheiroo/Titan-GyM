@@ -34,19 +34,23 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+          accept-android-sdk-licenses: true
 
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Decode Keystore
-        run: |
-          echo "Using project keystore"
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
       - name: Build Android App Bundle (.aab)
         run: |
           cd android
           chmod +x gradlew
           ./gradlew bundleRelease
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
       - name: Upload Production AAB Artifact
         uses: actions/upload-artifact@v4
